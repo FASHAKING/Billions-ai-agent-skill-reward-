@@ -69,15 +69,23 @@ fi
 ok "Node $(node -v) — npx $(npx -v)"
 echo
 
-# Step 1
+# Step 1 — auto-confirm the y/n prompt
 say "Step 1/2 — installing clawhub verified-agent-identity"
-npx --yes clawhub@latest install verified-agent-identity
+yes | npx --yes clawhub@latest install verified-agent-identity || true
 
 echo
-# Step 2
+# Step 2 — interactive agent picker (this is the only step that needs you)
 say "Step 2/2 — adding BillionsNetwork/verified-agent-identity skill"
 warn "When prompted, use ↑/↓ to scroll, SPACE to select your agent (e.g. Claude Code), ENTER to confirm."
-npx --yes skills add BillionsNetwork/verified-agent-identity
+# Re-attach stdin to the terminal so the picker works under 'curl | bash'
+if [ -t 0 ]; then
+  npx --yes skills add BillionsNetwork/verified-agent-identity
+elif [ -e /dev/tty ]; then
+  npx --yes skills add BillionsNetwork/verified-agent-identity </dev/tty
+else
+  warn "No interactive TTY available; running non-interactively."
+  npx --yes skills add BillionsNetwork/verified-agent-identity
+fi
 
 echo
 ok "Verified Agent Identity skill installed."
