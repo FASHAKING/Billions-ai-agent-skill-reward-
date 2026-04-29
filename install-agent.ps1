@@ -212,15 +212,20 @@ if (-not $WorkingDir) {
         }
         git clone https://github.com/BillionsNetwork/verified-agent-identity.git $FallbackDir
     }
-    Set-Location $FallbackDir
-    if (-not (Test-Path "package.json")) { npm init -y }
-    npm install
-    npm install shell-quote `@iden3/js-iden3-auth ethers`@6 uuid
     $WorkingDir = $FallbackDir
 }
 
 Ok "Working directory: $WorkingDir"
 Set-Location $WorkingDir
+
+# Install Node dependencies inside the skill folder regardless of how it
+# got there (clawhub does NOT run `npm install`, so SDK modules required
+# by scripts/createNewEthereumIdentity.js would otherwise be missing -
+# e.g. "Cannot find module '@0xpolygonid/js-sdk'").
+Say "Installing skill Node dependencies"
+if (-not (Test-Path "package.json")) { npm init -y }
+npm install
+npm install `@0xpolygonid/js-sdk `@iden3/js-iden3-auth shell-quote ethers`@6 uuid
 
 # ============================================================
 #  STEP 3 — agent identity
