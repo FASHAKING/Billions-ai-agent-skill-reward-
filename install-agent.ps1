@@ -255,23 +255,40 @@ switch ($UseMode) {
         Write-Host ""
         # Upstream createNewEthereumIdentity.js sometimes only prints
         # the DID and silently writes the key to disk, so the "key
-        # printed above" guidance is empty. Read it back out and surface it.
+        # printed above" guidance is empty. Recursively scan WorkingDir
+        # for any file containing a 0x-prefixed 64-hex string.
         $PrintedKey = $null
         $PrintedFile = $null
-        foreach ($f in @(".identity","identity.json",".env","agent.json")) {
+        $candidates = @(".identity","identity.json",".env","agent.json","identity","wallet.json","keystore.json",".agent",".agent.json")
+        foreach ($f in $candidates) {
             $path = Join-Path $WorkingDir $f
             if (-not (Test-Path $path)) { continue }
-            $match = Select-String -Path $path -Pattern '0x[a-fA-F0-9]{64}' -AllMatches |
+            $m = Select-String -Path $path -Pattern '0x[a-fA-F0-9]{64}' -AllMatches |
+                 Select-Object -First 1 -ExpandProperty Matches |
+                 Select-Object -First 1
+            if ($m) { $PrintedKey = $m.Value; $PrintedFile = $path; break }
+        }
+        if (-not $PrintedKey) {
+            $hit = Get-ChildItem -Path $WorkingDir -Recurse -File -ErrorAction SilentlyContinue |
+                   Where-Object { $_.FullName -notmatch '\\node_modules\\' -and $_.FullName -notmatch '\\\.git\\' } |
+                   Select-String -Pattern '0x[a-fA-F0-9]{64}' -List -ErrorAction SilentlyContinue |
+                   Select-Object -First 1
+            if ($hit) {
+                $m = Select-String -Path $hit.Path -Pattern '0x[a-fA-F0-9]{64}' -AllMatches |
                      Select-Object -First 1 -ExpandProperty Matches |
                      Select-Object -First 1
-            if ($match) { $PrintedKey = $match.Value; $PrintedFile = $path; break }
+                if ($m) { $PrintedKey = $m.Value; $PrintedFile = $hit.Path }
+            }
         }
         if ($PrintedKey) {
             Write-Host ("    Identity file : {0}" -f $PrintedFile)
             Write-Host ("    Private key   : {0}" -f $PrintedKey) -ForegroundColor Red
             Write-Host ""
         } else {
-            Warn "Could not auto-detect the private key. Check $WorkingDir for .identity / identity.json / .env / agent.json"
+            Warn "Could not auto-detect the private key under $WorkingDir."
+            Warn "List the directory and look for a file containing a 0x... 64-hex string:"
+            Warn ("    Get-ChildItem -Force '{0}'" -f $WorkingDir)
+            Warn ("    Get-ChildItem -Recurse -File '{0}' | Select-String '0x[a-fA-F0-9]{{64}}' -List" -f $WorkingDir)
         }
         Write-Host "!! IMPORTANT - BACK UP THE PRIVATE KEY SHOWN ABOVE !!" -ForegroundColor Red
         Write-Host "This key IS your agent's Billions identity. If you lose it," -ForegroundColor Red
