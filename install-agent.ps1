@@ -44,3 +44,8 @@ if ($LASTEXITCODE -ne 0) { Die "Step 2 failed." }
 Write-Host ""
 Ok "Verified Agent Identity skill installed."
 Say "You're qualified for the Billions FAIAR reward!"
+Write-Host ""
+Write-Host "Built with " -NoNewline
+Write-Host "♥" -ForegroundColor Red -NoNewline
+Write-Host " by fashaking — " -NoNewline
+Write-Host "https://x.com/FASHAKING3" -ForegroundColor Cyan
