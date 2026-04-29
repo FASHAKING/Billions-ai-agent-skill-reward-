@@ -176,4 +176,4 @@ curl -sL https://raw.githubusercontent.com/FASHAKING/Billions-ai-agent-skill-rew
 
 ---
 
-Made with ❤️ for the Billions agent community.
+Built with ❤️ by [fashaking](https://x.com/FASHAKING3)
