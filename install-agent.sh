@@ -1,7 +1,26 @@
 #!/usr/bin/env bash
-# Billions FAIAR — Verified Agent Identity installer
-# Usage:
-#   curl -sL https://raw.githubusercontent.com/FASHAKING/Billions-ai-agent-skill-reward-/main/install-agent.sh | bash
+# ============================================================
+#  Billions FAIAR — Verified Agent Identity installer
+#  Multi-platform (Termux / Linux / macOS)
+#
+#  Usage:
+#    curl -sL https://raw.githubusercontent.com/FASHAKING/Billions-ai-agent-skill-reward-/main/install-agent.sh | bash
+#
+#  What this does, in order:
+#    1. Decide what to do with the agent identity:
+#         - reuse one already on disk if found, or
+#         - import a private key you paste, or
+#         - generate a brand-new one
+#       Only the "generate" branch asks for the agent name & description.
+#    2. Install Node.js (and Git, in case the clawhub fallback is needed)
+#    3. Try `npx clawhub@latest install verified-agent-identity` first
+#       and fall back to `git clone BillionsNetwork/verified-agent-identity`
+#       + npm install + commonly-missing modules if clawhub fails.
+#    4. Run scripts/createNewEthereumIdentity.js  (skipped if reusing)
+#    5. Run scripts/manualLinkHumanToAgent.js    (only in "generate" mode)
+#    6. Run `npx skills add BillionsNetwork/verified-agent-identity`
+#       so you can register the skill with Claude Code / Cursor / etc.
+# ============================================================
 
 set -e
 
@@ -17,76 +36,306 @@ ok()   { printf "${GREEN}✔${NC}  %s\n" "$1"; }
 warn() { printf "${YELLOW}!${NC}  %s\n" "$1"; }
 die()  { printf "${RED}✘${NC}  %s\n" "$1" >&2; exit 1; }
 
-# Detect platform
+# A TTY for interactive prompts when running under `curl | bash`.
+if [ -t 0 ]; then
+    TTY=/dev/stdin
+elif [ -e /dev/tty ]; then
+    TTY=/dev/tty
+else
+    TTY=""
+fi
+
+ask() {
+    # ask "Prompt" "default"
+    local prompt="$1" default="${2:-}" reply
+    if [ -z "$TTY" ]; then printf '%s' "$default"; return; fi
+    if [ -n "$default" ]; then
+        printf "${BOLD}? %s${NC} [${default}] " "$prompt" >&2
+    else
+        printf "${BOLD}? %s${NC} " "$prompt" >&2
+    fi
+    IFS= read -r reply <"$TTY" || reply=""
+    printf '%s' "${reply:-$default}"
+}
+
+ask_secret() {
+    local prompt="$1" reply
+    [ -z "$TTY" ] && die "Need an interactive terminal to read a private key."
+    printf "${BOLD}? %s${NC} " "$prompt" >&2
+    stty -echo <"$TTY" 2>/dev/null || true
+    IFS= read -r reply <"$TTY" || reply=""
+    stty echo <"$TTY" 2>/dev/null || true
+    printf '\n' >&2
+    printf '%s' "$reply"
+}
+
+# --- platform detect ---------------------------------------------------------
 PLATFORM="unknown"
 case "$(uname -s)" in
-  Linux*)
-    if [ -n "${PREFIX:-}" ] && echo "$PREFIX" | grep -q "com.termux"; then
-      PLATFORM="termux"
-    else
-      PLATFORM="linux"
-    fi
-    ;;
-  Darwin*) PLATFORM="macos" ;;
-  *)       PLATFORM="$(uname -s)" ;;
+    Linux*)
+        if [ -n "${PREFIX:-}" ] && echo "$PREFIX" | grep -q "com.termux"; then
+            PLATFORM="termux"
+        else
+            PLATFORM="linux"
+        fi
+        ;;
+    Darwin*) PLATFORM="macos" ;;
+    *)       PLATFORM="$(uname -s)" ;;
 esac
 
 say "Billions FAIAR — Verified Agent Identity installer"
 echo "    Platform detected: ${BOLD}${PLATFORM}${NC}"
 echo
 
-# Ensure Node.js + npx
-if ! command -v node >/dev/null 2>&1 || ! command -v npx >/dev/null 2>&1; then
-  warn "Node.js / npx not found. Attempting to install..."
-  case "$PLATFORM" in
-    termux)
-      pkg update -y && pkg install -y nodejs
-      ;;
-    macos)
-      if command -v brew >/dev/null 2>&1; then
-        brew install node
-      else
-        die "Homebrew not found. Install Node.js from https://nodejs.org/ then re-run."
-      fi
-      ;;
-    linux)
-      if command -v apt-get >/dev/null 2>&1; then
-        sudo apt-get update -y && sudo apt-get install -y nodejs npm
-      elif command -v dnf >/dev/null 2>&1; then
-        sudo dnf install -y nodejs npm
-      elif command -v pacman >/dev/null 2>&1; then
-        sudo pacman -Sy --noconfirm nodejs npm
-      else
-        die "No supported package manager found. Install Node.js from https://nodejs.org/ then re-run."
-      fi
-      ;;
-    *)
-      die "Unsupported platform. Install Node.js manually from https://nodejs.org/ then re-run."
-      ;;
-  esac
+# ============================================================
+#  STEP 0 — decide identity intent BEFORE installing anything
+# ============================================================
+
+# Locations that may already hold an identity from a prior install.
+SKILL_PATHS=(
+    "$HOME/verified-agent-identity"
+    "$HOME/.claude/skills/verified-agent-identity"
+    "$HOME/.cursor/skills/verified-agent-identity"
+    "$HOME/.cline/skills/verified-agent-identity"
+    "$HOME/.continue/skills/verified-agent-identity"
+    "$HOME/.config/clawhub/skills/verified-agent-identity"
+    "$HOME/.clawhub/skills/verified-agent-identity"
+)
+ID_FILES=( ".identity" "identity.json" ".env" "agent.json" )
+
+EXISTING_KEY=""
+USE_MODE=""
+EXISTING_DIR=""
+
+# 1) Env var beats everything.
+if [ -n "${BILLIONS_PRIVATE_KEY:-}" ]; then
+    EXISTING_KEY="$BILLIONS_PRIVATE_KEY"
+    USE_MODE="env"
+    ok "Detected BILLIONS_PRIVATE_KEY environment variable — will import it."
 fi
 
+# 2) Look for a folder on disk with identity files.
+if [ -z "$USE_MODE" ]; then
+    for d in "${SKILL_PATHS[@]}"; do
+        [ -d "$d" ] || continue
+        for f in "${ID_FILES[@]}"; do
+            if [ -f "$d/$f" ]; then
+                EXISTING_DIR="$d"
+                break 2
+            fi
+        done
+    done
+    if [ -n "$EXISTING_DIR" ]; then
+        echo
+        ok "Existing Billions identity found on this machine:"
+        echo "      $EXISTING_DIR"
+        REUSE=$(ask "Reuse it?" "Y")
+        case "$(echo "$REUSE" | tr '[:upper:]' '[:lower:]')" in
+            ""|y|yes) USE_MODE="reuse" ;;
+        esac
+    fi
+fi
+
+# 3) Otherwise ask import vs generate.
+if [ -z "$USE_MODE" ]; then
+    echo
+    echo "    No existing Billions identity is being reused. Pick one:"
+    echo "      [1] I already have a private key — let me paste it (input hidden)"
+    echo "      [2] Generate a brand-new identity for me"
+    echo
+    CHOICE=$(ask "Enter 1 or 2" "2")
+    case "$(echo "$CHOICE" | tr '[:upper:]' '[:lower:]')" in
+        1|import|existing|y|yes)
+            EXISTING_KEY=$(ask_secret "Paste your Ethereum private key (0x...)")
+            [ -z "$EXISTING_KEY" ] && die "Empty key. Aborting."
+            USE_MODE="import"
+            ;;
+        *)
+            USE_MODE="generate"
+            ;;
+    esac
+fi
+
+# 4) Only ask for agent name & description in "generate" mode.
+AGENT_NAME=""
+AGENT_DESC=""
+if [ "$USE_MODE" = "generate" ]; then
+    echo
+    AGENT_NAME=$(ask "Agent name (e.g. MyAgent)" "")
+    while [ -z "$AGENT_NAME" ]; do
+        warn "Agent name cannot be empty."
+        AGENT_NAME=$(ask "Agent name" "")
+    done
+    AGENT_DESC=$(ask "Agent description (e.g. AI trading agent)" "")
+    while [ -z "$AGENT_DESC" ]; do
+        warn "Agent description cannot be empty."
+        AGENT_DESC=$(ask "Agent description" "")
+    done
+fi
+
+echo
+echo "    Identity mode : ${BOLD}${USE_MODE}${NC}"
+[ -n "$AGENT_NAME" ] && echo "    Agent name    : ${AGENT_NAME}"
+[ -n "$AGENT_DESC" ] && echo "    Description   : ${AGENT_DESC}"
+echo
+
+# ============================================================
+#  STEP 1 — install Node.js (and Git for the clawhub fallback)
+# ============================================================
+say "Step 1 — installing Node.js & Git if missing"
+
+need_node=0; need_git=0
+command -v node >/dev/null 2>&1 || need_node=1
+command -v npx  >/dev/null 2>&1 || need_node=1
+command -v git  >/dev/null 2>&1 || need_git=1
+
+if [ $need_node -eq 1 ] || [ $need_git -eq 1 ]; then
+    case "$PLATFORM" in
+        termux)
+            yes | pkg update -y 2>&1
+            [ $need_node -eq 1 ] && yes | pkg install -y nodejs
+            [ $need_git  -eq 1 ] && yes | pkg install -y git
+            ;;
+        macos)
+            if ! command -v brew >/dev/null 2>&1; then
+                die "Homebrew not found. Install it from https://brew.sh and re-run."
+            fi
+            [ $need_node -eq 1 ] && brew install node
+            [ $need_git  -eq 1 ] && brew install git
+            ;;
+        linux)
+            if   command -v apt-get >/dev/null 2>&1; then
+                sudo apt-get update -y
+                [ $need_node -eq 1 ] && sudo apt-get install -y nodejs npm
+                [ $need_git  -eq 1 ] && sudo apt-get install -y git
+            elif command -v dnf >/dev/null 2>&1; then
+                [ $need_node -eq 1 ] && sudo dnf install -y nodejs npm
+                [ $need_git  -eq 1 ] && sudo dnf install -y git
+            elif command -v pacman >/dev/null 2>&1; then
+                sudo pacman -Sy --noconfirm
+                [ $need_node -eq 1 ] && sudo pacman -S --noconfirm nodejs npm
+                [ $need_git  -eq 1 ] && sudo pacman -S --noconfirm git
+            elif command -v apk >/dev/null 2>&1; then
+                [ $need_node -eq 1 ] && sudo apk add --no-cache nodejs npm
+                [ $need_git  -eq 1 ] && sudo apk add --no-cache git
+            else
+                die "No supported package manager. Install Node.js + Git manually."
+            fi
+            ;;
+        *) die "Unsupported platform. Install Node.js + Git manually." ;;
+    esac
+fi
 ok "Node $(node -v) — npx $(npx -v)"
-echo
+command -v git >/dev/null 2>&1 && ok "$(git --version)"
 
-# Step 1 — auto-confirm the y/n prompt
-say "Step 1/2 — installing clawhub verified-agent-identity"
-if ! yes | npx --yes clawhub@latest install verified-agent-identity; then
-  die "Step 1 failed (clawhub install). Aborting before Step 2 to avoid a partial install."
+# ============================================================
+#  STEP 2 — install skill files (clawhub first, git clone fallback)
+# ============================================================
+say "Step 2 — installing skill files (clawhub first, git clone fallback)"
+
+WORKING_DIR=""
+CLAWHUB_OK=0
+
+if yes | npx --yes clawhub@latest install verified-agent-identity 2>&1; then
+    ok "clawhub install succeeded."
+    CLAWHUB_OK=1
+    # Try to find where clawhub put the skill.
+    for d in "${SKILL_PATHS[@]}"; do
+        if [ -d "$d" ] && [ -f "$d/scripts/createNewEthereumIdentity.js" ]; then
+            WORKING_DIR="$d"
+            break
+        fi
+    done
+    if [ -z "$WORKING_DIR" ]; then
+        FOUND=$(find "$HOME" -maxdepth 6 -type d -name "verified-agent-identity" 2>/dev/null \
+                | while read -r p; do
+                    [ -f "$p/scripts/createNewEthereumIdentity.js" ] && echo "$p"
+                done | head -n 1)
+        [ -n "$FOUND" ] && WORKING_DIR="$FOUND"
+    fi
+    [ -z "$WORKING_DIR" ] && warn "clawhub installed but no scripts/ folder was located — falling back to git clone."
 fi
 
-echo
-# Step 2 — interactive agent picker (this is the only step that needs you)
-say "Step 2/2 — adding BillionsNetwork/verified-agent-identity skill"
-warn "When prompted, use ↑/↓ to scroll, SPACE to select your agent (e.g. Claude Code), ENTER to confirm."
-# Re-attach stdin to the terminal so the picker works under 'curl | bash'
-if [ -t 0 ]; then
-  npx --yes skills add BillionsNetwork/verified-agent-identity
-elif [ -e /dev/tty ]; then
-  npx --yes skills add BillionsNetwork/verified-agent-identity </dev/tty
+if [ -z "$WORKING_DIR" ]; then
+    warn "Falling back to: git clone + npm install + commonly-missing modules"
+    FALLBACK_DIR="$HOME/verified-agent-identity"
+    cd "$HOME"
+    if [ "$USE_MODE" = "reuse" ] && [ -d "$FALLBACK_DIR" ]; then
+        ok "Reusing existing folder at $FALLBACK_DIR (no fresh clone)."
+    else
+        if [ -d "$FALLBACK_DIR" ]; then
+            warn "Existing folder $FALLBACK_DIR will be removed for a fresh install."
+            rm -rf "$FALLBACK_DIR"
+        fi
+        git clone https://github.com/BillionsNetwork/verified-agent-identity.git "$FALLBACK_DIR"
+    fi
+    cd "$FALLBACK_DIR"
+    if [ ! -f "package.json" ]; then npm init -y; fi
+    npm install
+    npm install shell-quote @iden3/js-iden3-auth ethers@6 uuid
+    WORKING_DIR="$FALLBACK_DIR"
+fi
+
+ok "Working directory: $WORKING_DIR"
+cd "$WORKING_DIR"
+
+# ============================================================
+#  STEP 3 — set up the agent's Ethereum identity
+# ============================================================
+say "Step 3 — agent identity"
+
+case "$USE_MODE" in
+    reuse)
+        ok "Reusing existing identity at $WORKING_DIR — skipping key creation."
+        ;;
+    env|import)
+        node scripts/createNewEthereumIdentity.js --key "$EXISTING_KEY" \
+            || die "Failed to import identity."
+        unset EXISTING_KEY
+        ok "Imported your existing private key."
+        ;;
+    generate)
+        node scripts/createNewEthereumIdentity.js \
+            || die "Failed to generate a new identity."
+        echo
+        printf "${RED}${BOLD}!! IMPORTANT — back up the private key printed above !!${NC}\n"
+        printf "${RED}This key IS your agent's Billions identity. If you lose it,\n"
+        printf "you lose the identity (and any FAIAR rewards tied to it).\n"
+        printf "Save it in a password manager NOW. It will not be shown again.${NC}\n"
+        echo
+        _=$(ask "Press ENTER once you have backed up the key" "")
+        ok "New identity generated."
+        ;;
+esac
+
+# ============================================================
+#  STEP 4 — link the agent to your Billions account
+#  (only in "generate" mode — reuse/import are already linked)
+# ============================================================
+if [ "$USE_MODE" = "generate" ]; then
+    say "Step 4 — link this agent to your Billions account"
+    esc_name=$(printf '%s' "$AGENT_NAME" | sed 's/"/\\"/g')
+    esc_desc=$(printf '%s' "$AGENT_DESC" | sed 's/"/\\"/g')
+    CHALLENGE="{\"name\":\"${esc_name}\",\"description\":\"${esc_desc}\"}"
+    node scripts/manualLinkHumanToAgent.js --challenge "$CHALLENGE" \
+        || die "Failed to generate the verification link."
+    echo
+    warn "Open the URL printed above in your browser and sign in with your Billions account."
+    warn "That handshake is what binds this agent to your Billions account."
+    _=$(ask "Press ENTER once you've completed the link in your browser" "")
 else
-  warn "No interactive TTY available; running non-interactively."
-  npx --yes skills add BillionsNetwork/verified-agent-identity
+    say "Step 4 — skipped (existing identity is already linked elsewhere)"
+fi
+
+# ============================================================
+#  STEP 5 — register skill with the AI agent of your choice
+# ============================================================
+say "Step 5 — register the skill with your AI agent"
+warn "Use ↑/↓ to scroll, SPACE to select your agent (e.g. Claude Code), ENTER to confirm."
+if [ -n "$TTY" ] && [ "$TTY" != "/dev/stdin" ]; then
+    npx --yes skills add BillionsNetwork/verified-agent-identity <"$TTY"
+else
+    npx --yes skills add BillionsNetwork/verified-agent-identity
 fi
 
 echo
