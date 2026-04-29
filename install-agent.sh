@@ -315,53 +315,27 @@ case "$USE_MODE" in
         ok "Imported your existing private key."
         ;;
     generate)
-        node scripts/createNewEthereumIdentity.js \
+        # Upstream createNewEthereumIdentity.js generates the key in
+        # memory and neither prints nor writes it, so users have no key
+        # to back up. Generate the key ourselves with ethers (already
+        # installed in WORKING_DIR), surface it, then feed it to the
+        # script via the same --key path that import mode uses.
+        GENERATED_KEY=$(node -e "const {Wallet} = require('ethers'); process.stdout.write(Wallet.createRandom().privateKey);" 2>/dev/null || true)
+        if [ -z "$GENERATED_KEY" ]; then
+            die "Could not generate a private key (ethers not available in $WORKING_DIR)."
+        fi
+        node scripts/createNewEthereumIdentity.js --key "$GENERATED_KEY" \
             || die "Failed to generate a new identity."
         echo
-        # Upstream createNewEthereumIdentity.js sometimes only prints the
-        # DID and silently writes the key to disk, so the "key printed
-        # above" guidance is empty. Recursively scan WORKING_DIR for any
-        # file containing a 0x-prefixed 64-hex string and surface it.
-        PRINTED_KEY=""
-        PRINTED_FILE=""
-        # Search common identity files first (fast path), then fall
-        # back to a recursive grep if those don't match.
-        for f in .identity identity.json .env agent.json identity wallet.json keystore.json .agent .agent.json; do
-            [ -f "$WORKING_DIR/$f" ] || continue
-            k=$(grep -oE '0x[a-fA-F0-9]{64}' "$WORKING_DIR/$f" 2>/dev/null | head -n 1 || true)
-            if [ -n "$k" ]; then
-                PRINTED_KEY="$k"
-                PRINTED_FILE="$WORKING_DIR/$f"
-                break
-            fi
-        done
-        if [ -z "$PRINTED_KEY" ]; then
-            HIT=$(grep -rElI --exclude-dir=node_modules --exclude-dir=.git \
-                    '0x[a-fA-F0-9]{64}' "$WORKING_DIR" 2>/dev/null | head -n 1 || true)
-            if [ -n "$HIT" ]; then
-                k=$(grep -oE '0x[a-fA-F0-9]{64}' "$HIT" 2>/dev/null | head -n 1 || true)
-                if [ -n "$k" ]; then
-                    PRINTED_KEY="$k"
-                    PRINTED_FILE="$HIT"
-                fi
-            fi
-        fi
-        if [ -n "$PRINTED_KEY" ]; then
-            printf "${BOLD}    Identity file : ${NC}%s\n" "$PRINTED_FILE"
-            printf "${BOLD}    Private key   : ${RED}%s${NC}\n" "$PRINTED_KEY"
-            echo
-        else
-            warn "Could not auto-detect the private key under $WORKING_DIR."
-            warn "List the directory and look for a file containing a 0x... 64-hex string:"
-            warn "    ls -la \"$WORKING_DIR\""
-            warn "    grep -rEl '0x[a-fA-F0-9]{64}' \"$WORKING_DIR\" --exclude-dir=node_modules"
-        fi
+        printf "${BOLD}    Private key   : ${RED}%s${NC}\n" "$GENERATED_KEY"
+        echo
         printf "${RED}${BOLD}!! IMPORTANT — back up the private key shown above !!${NC}\n"
         printf "${RED}This key IS your agent's Billions identity. If you lose it,\n"
         printf "you lose the identity (and any FAIAR rewards tied to it).\n"
         printf "Save it in a password manager NOW. It will not be shown again.${NC}\n"
         echo
         _=$(ask "Press ENTER once you have backed up the key" "")
+        unset GENERATED_KEY
         ok "New identity generated."
         ;;
 esac

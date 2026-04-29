@@ -250,52 +250,25 @@ switch ($UseMode) {
         Ok "Imported your existing private key."
     }
     "generate" {
-        node scripts/createNewEthereumIdentity.js
+        # Upstream createNewEthereumIdentity.js generates the key in
+        # memory and neither prints nor writes it, so users have no
+        # key to back up. Generate the key ourselves with ethers
+        # (already installed in WorkingDir), surface it, then feed it
+        # to the script via the same --key path that import mode uses.
+        $GeneratedKey = (node -e "const {Wallet} = require('ethers'); process.stdout.write(Wallet.createRandom().privateKey);") 2>$null
+        if (-not $GeneratedKey) { Die "Could not generate a private key (ethers not available in $WorkingDir)." }
+        node scripts/createNewEthereumIdentity.js --key $GeneratedKey
         if ($LASTEXITCODE -ne 0) { Die "Failed to generate a new identity." }
         Write-Host ""
-        # Upstream createNewEthereumIdentity.js sometimes only prints
-        # the DID and silently writes the key to disk, so the "key
-        # printed above" guidance is empty. Recursively scan WorkingDir
-        # for any file containing a 0x-prefixed 64-hex string.
-        $PrintedKey = $null
-        $PrintedFile = $null
-        $candidates = @(".identity","identity.json",".env","agent.json","identity","wallet.json","keystore.json",".agent",".agent.json")
-        foreach ($f in $candidates) {
-            $path = Join-Path $WorkingDir $f
-            if (-not (Test-Path $path)) { continue }
-            $m = Select-String -Path $path -Pattern '0x[a-fA-F0-9]{64}' -AllMatches |
-                 Select-Object -First 1 -ExpandProperty Matches |
-                 Select-Object -First 1
-            if ($m) { $PrintedKey = $m.Value; $PrintedFile = $path; break }
-        }
-        if (-not $PrintedKey) {
-            $hit = Get-ChildItem -Path $WorkingDir -Recurse -File -ErrorAction SilentlyContinue |
-                   Where-Object { $_.FullName -notmatch '\\node_modules\\' -and $_.FullName -notmatch '\\\.git\\' } |
-                   Select-String -Pattern '0x[a-fA-F0-9]{64}' -List -ErrorAction SilentlyContinue |
-                   Select-Object -First 1
-            if ($hit) {
-                $m = Select-String -Path $hit.Path -Pattern '0x[a-fA-F0-9]{64}' -AllMatches |
-                     Select-Object -First 1 -ExpandProperty Matches |
-                     Select-Object -First 1
-                if ($m) { $PrintedKey = $m.Value; $PrintedFile = $hit.Path }
-            }
-        }
-        if ($PrintedKey) {
-            Write-Host ("    Identity file : {0}" -f $PrintedFile)
-            Write-Host ("    Private key   : {0}" -f $PrintedKey) -ForegroundColor Red
-            Write-Host ""
-        } else {
-            Warn "Could not auto-detect the private key under $WorkingDir."
-            Warn "List the directory and look for a file containing a 0x... 64-hex string:"
-            Warn ("    Get-ChildItem -Force '{0}'" -f $WorkingDir)
-            Warn ("    Get-ChildItem -Recurse -File '{0}' | Select-String '0x[a-fA-F0-9]{{64}}' -List" -f $WorkingDir)
-        }
+        Write-Host ("    Private key   : {0}" -f $GeneratedKey) -ForegroundColor Red
+        Write-Host ""
         Write-Host "!! IMPORTANT - BACK UP THE PRIVATE KEY SHOWN ABOVE !!" -ForegroundColor Red
         Write-Host "This key IS your agent's Billions identity. If you lose it," -ForegroundColor Red
         Write-Host "you lose the identity (and any FAIAR rewards tied to it)." -ForegroundColor Red
         Write-Host "Save it in a password manager NOW. It will not be shown again." -ForegroundColor Red
         Write-Host ""
         Read-Host "Press ENTER once you have backed up the key" | Out-Null
+        $GeneratedKey = $null
         Ok "New identity generated."
     }
 }
