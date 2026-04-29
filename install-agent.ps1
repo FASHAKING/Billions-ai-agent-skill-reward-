@@ -201,7 +201,14 @@ try {
 
 if (-not $WorkingDir) {
     Warn "Falling back to: git clone + npm install + commonly-missing modules"
-    $FallbackDir = Join-Path $HOME "verified-agent-identity"
+    # In reuse mode, target the directory we actually detected the
+    # identity in (e.g. ~\.claude\skills\verified-agent-identity) so
+    # the rest of the flow runs against the folder the user approved.
+    if ($UseMode -eq "reuse" -and $ExistingDir) {
+        $FallbackDir = $ExistingDir
+    } else {
+        $FallbackDir = Join-Path $HOME "verified-agent-identity"
+    }
     Set-Location $HOME
     if ($UseMode -eq "reuse" -and (Test-Path $FallbackDir)) {
         Ok "Reusing existing folder at $FallbackDir (no fresh clone)."

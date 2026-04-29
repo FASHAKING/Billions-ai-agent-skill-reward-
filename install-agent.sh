@@ -160,6 +160,9 @@ fi
 AGENT_NAME=""
 AGENT_DESC=""
 if [ "$USE_MODE" = "generate" ]; then
+    # Without a TTY, ask returns the empty default forever and the
+    # validation loop spins. Bail out with a clear message instead.
+    [ -z "$TTY" ] && die "generate mode needs an interactive terminal for the agent name & description. Re-run from a terminal, or set BILLIONS_PRIVATE_KEY to import an existing key."
     echo
     AGENT_NAME=$(ask "Agent name (e.g. MyAgent)" "")
     while [ -z "$AGENT_NAME" ]; do
@@ -258,7 +261,14 @@ fi
 
 if [ -z "$WORKING_DIR" ]; then
     warn "Falling back to: git clone + npm install + commonly-missing modules"
-    FALLBACK_DIR="$HOME/verified-agent-identity"
+    # In reuse mode, target the directory we actually detected the
+    # identity in (e.g. ~/.claude/skills/verified-agent-identity) so
+    # the rest of the flow runs against the folder the user approved.
+    if [ "$USE_MODE" = "reuse" ] && [ -n "$EXISTING_DIR" ]; then
+        FALLBACK_DIR="$EXISTING_DIR"
+    else
+        FALLBACK_DIR="$HOME/verified-agent-identity"
+    fi
     cd "$HOME"
     if [ "$USE_MODE" = "reuse" ] && [ -d "$FALLBACK_DIR" ]; then
         ok "Reusing existing folder at $FALLBACK_DIR (no fresh clone)."
