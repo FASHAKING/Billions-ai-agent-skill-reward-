@@ -160,6 +160,9 @@ fi
 AGENT_NAME=""
 AGENT_DESC=""
 if [ "$USE_MODE" = "generate" ]; then
+    # Without a TTY, ask returns the empty default forever and the
+    # validation loop spins. Bail out with a clear message instead.
+    [ -z "$TTY" ] && die "generate mode needs an interactive terminal for the agent name & description. Re-run from a terminal, or set BILLIONS_PRIVATE_KEY to import an existing key."
     echo
     AGENT_NAME=$(ask "Agent name (e.g. MyAgent)" "")
     while [ -z "$AGENT_NAME" ]; do
@@ -258,7 +261,14 @@ fi
 
 if [ -z "$WORKING_DIR" ]; then
     warn "Falling back to: git clone + npm install + commonly-missing modules"
-    FALLBACK_DIR="$HOME/verified-agent-identity"
+    # In reuse mode, target the directory we actually detected the
+    # identity in (e.g. ~/.claude/skills/verified-agent-identity) so
+    # the rest of the flow runs against the folder the user approved.
+    if [ "$USE_MODE" = "reuse" ] && [ -n "$EXISTING_DIR" ]; then
+        FALLBACK_DIR="$EXISTING_DIR"
+    else
+        FALLBACK_DIR="$HOME/verified-agent-identity"
+    fi
     cd "$HOME"
     if [ "$USE_MODE" = "reuse" ] && [ -d "$FALLBACK_DIR" ]; then
         ok "Reusing existing folder at $FALLBACK_DIR (no fresh clone)."
@@ -269,15 +279,25 @@ if [ -z "$WORKING_DIR" ]; then
         fi
         git clone https://github.com/BillionsNetwork/verified-agent-identity.git "$FALLBACK_DIR"
     fi
-    cd "$FALLBACK_DIR"
-    if [ ! -f "package.json" ]; then npm init -y; fi
-    npm install
-    npm install shell-quote @iden3/js-iden3-auth ethers@6 uuid
     WORKING_DIR="$FALLBACK_DIR"
 fi
 
 ok "Working directory: $WORKING_DIR"
 cd "$WORKING_DIR"
+
+# Install Node dependencies inside the skill folder regardless of how it
+# got there (clawhub does NOT run `npm install`, so the SDK modules
+# required by scripts/createNewEthereumIdentity.js would otherwise be
+# missing — e.g. `Cannot find module '@0xpolygonid/js-sdk'`).
+say "Installing skill Node dependencies"
+if [ ! -f "package.json" ]; then npm init -y; fi
+npm install
+npm install \
+    @0xpolygonid/js-sdk \
+    @iden3/js-iden3-auth \
+    shell-quote \
+    ethers@6 \
+    uuid
 
 # ============================================================
 #  STEP 3 — set up the agent's Ethereum identity
