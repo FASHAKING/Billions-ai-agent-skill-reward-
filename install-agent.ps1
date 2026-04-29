@@ -84,12 +84,36 @@ if (-not $UseMode) {
         if ($ExistingDir) { break }
     }
     if ($ExistingDir) {
+        # Older runs of this installer (and the upstream script) could
+        # leave behind a DID with no recoverable private key. Detect
+        # that orphan state so we can warn instead of silently reusing
+        # a useless identity.
+        $ExistingHasKey = $false
+        $hit = Get-ChildItem -Path $ExistingDir -Recurse -File -ErrorAction SilentlyContinue |
+               Where-Object { $_.FullName -notmatch '\\node_modules\\' -and $_.FullName -notmatch '\\\.git\\' } |
+               Select-String -Pattern '0x[a-fA-F0-9]{64}' -List -ErrorAction SilentlyContinue |
+               Select-Object -First 1
+        if ($hit) { $ExistingHasKey = $true }
+
         Write-Host ""
-        Ok "Existing Billions identity found on this machine:"
-        Write-Host "      $ExistingDir"
-        $reuse = Ask "Reuse it?" "Y"
-        if ([string]::IsNullOrWhiteSpace($reuse) -or $reuse -match "^(y|Y|yes|Yes)$") {
-            $UseMode = "reuse"
+        if ($ExistingHasKey) {
+            Ok "Existing Billions identity found on this machine:"
+            Write-Host "      $ExistingDir"
+            $reuse = Ask "Reuse it?" "Y"
+            if ([string]::IsNullOrWhiteSpace($reuse) -or $reuse -match "^(y|Y|yes|Yes)$") {
+                $UseMode = "reuse"
+            }
+        } else {
+            Warn "Found an existing identity at $ExistingDir but no private key is recoverable from it."
+            Warn "This is the known orphan-DID state from earlier installer runs - the key was generated"
+            Warn "in memory by the upstream script and never saved. The DID cannot be reused without it."
+            $regen = Ask "Generate a brand-new identity instead?" "Y"
+            if ([string]::IsNullOrWhiteSpace($regen) -or $regen -match "^(y|Y|yes|Yes)$") {
+                $UseMode = "generate"
+                $ExistingDir = $null
+            } else {
+                Die "Aborting. If you have the original private key, re-run and choose option [1] to import it."
+            }
         }
     }
 }
