@@ -315,36 +315,27 @@ case "$USE_MODE" in
         ok "Imported your existing private key."
         ;;
     generate)
-        node scripts/createNewEthereumIdentity.js \
+        # Upstream createNewEthereumIdentity.js generates the key in
+        # memory and neither prints nor writes it, so users have no key
+        # to back up. Generate the key ourselves with ethers (already
+        # installed in WORKING_DIR), surface it, then feed it to the
+        # script via the same --key path that import mode uses.
+        GENERATED_KEY=$(node -e "const {Wallet} = require('ethers'); process.stdout.write(Wallet.createRandom().privateKey);" 2>/dev/null || true)
+        if [ -z "$GENERATED_KEY" ]; then
+            die "Could not generate a private key (ethers not available in $WORKING_DIR)."
+        fi
+        node scripts/createNewEthereumIdentity.js --key "$GENERATED_KEY" \
             || die "Failed to generate a new identity."
         echo
-        # Upstream createNewEthereumIdentity.js sometimes only prints the
-        # DID and silently writes the key to disk, so the "key printed
-        # above" guidance is empty. Read it back out and surface it.
-        PRINTED_KEY=""
-        PRINTED_FILE=""
-        for f in .identity identity.json .env agent.json; do
-            [ -f "$WORKING_DIR/$f" ] || continue
-            k=$(grep -oE '0x[a-fA-F0-9]{64}' "$WORKING_DIR/$f" 2>/dev/null | head -n 1 || true)
-            if [ -n "$k" ]; then
-                PRINTED_KEY="$k"
-                PRINTED_FILE="$WORKING_DIR/$f"
-                break
-            fi
-        done
-        if [ -n "$PRINTED_KEY" ]; then
-            printf "${BOLD}    Identity file : ${NC}%s\n" "$PRINTED_FILE"
-            printf "${BOLD}    Private key   : ${RED}%s${NC}\n" "$PRINTED_KEY"
-            echo
-        else
-            warn "Could not auto-detect the private key. Check $WORKING_DIR for .identity / identity.json / .env / agent.json"
-        fi
+        printf "${BOLD}    Private key   : ${RED}%s${NC}\n" "$GENERATED_KEY"
+        echo
         printf "${RED}${BOLD}!! IMPORTANT — back up the private key shown above !!${NC}\n"
         printf "${RED}This key IS your agent's Billions identity. If you lose it,\n"
         printf "you lose the identity (and any FAIAR rewards tied to it).\n"
         printf "Save it in a password manager NOW. It will not be shown again.${NC}\n"
         echo
         _=$(ask "Press ENTER once you have backed up the key" "")
+        unset GENERATED_KEY
         ok "New identity generated."
         ;;
 esac
