@@ -126,38 +126,13 @@ if [ -z "$USE_MODE" ]; then
         done
     done
     if [ -n "$EXISTING_DIR" ]; then
-        # Older runs of this installer (and the upstream script) could
-        # leave behind a DID with no recoverable private key. Detect
-        # that orphan state so we can warn instead of silently reusing
-        # a useless identity.
-        EXISTING_HAS_KEY=0
-        if grep -rqEI --exclude-dir=node_modules --exclude-dir=.git \
-                '0x[a-fA-F0-9]{64}' "$EXISTING_DIR" 2>/dev/null; then
-            EXISTING_HAS_KEY=1
-        fi
         echo
-        if [ $EXISTING_HAS_KEY -eq 1 ]; then
-            ok "Existing Billions identity found on this machine:"
-            echo "      $EXISTING_DIR"
-            REUSE=$(ask "Reuse it?" "Y")
-            case "$(echo "$REUSE" | tr '[:upper:]' '[:lower:]')" in
-                ""|y|yes) USE_MODE="reuse" ;;
-            esac
-        else
-            warn "Found an existing identity at $EXISTING_DIR but no private key is recoverable from it."
-            warn "This is the known orphan-DID state from earlier installer runs — the key was generated"
-            warn "in memory by the upstream script and never saved. The DID cannot be reused without it."
-            REGEN=$(ask "Generate a brand-new identity instead?" "Y")
-            case "$(echo "$REGEN" | tr '[:upper:]' '[:lower:]')" in
-                ""|y|yes)
-                    USE_MODE="generate"
-                    EXISTING_DIR=""
-                    ;;
-                *)
-                    die "Aborting. If you have the original private key, re-run and choose option [1] to import it."
-                    ;;
-            esac
-        fi
+        ok "Existing Billions identity found on this machine:"
+        echo "      $EXISTING_DIR"
+        REUSE=$(ask "Reuse it?" "Y")
+        case "$(echo "$REUSE" | tr '[:upper:]' '[:lower:]')" in
+            ""|y|yes) USE_MODE="reuse" ;;
+        esac
     fi
 fi
 
