@@ -71,7 +71,9 @@ echo
 
 # Step 1 — auto-confirm the y/n prompt
 say "Step 1/2 — installing clawhub verified-agent-identity"
-yes | npx --yes clawhub@latest install verified-agent-identity || true
+if ! yes | npx --yes clawhub@latest install verified-agent-identity; then
+  die "Step 1 failed (clawhub install). Aborting before Step 2 to avoid a partial install."
+fi
 
 echo
 # Step 2 — interactive agent picker (this is the only step that needs you)
