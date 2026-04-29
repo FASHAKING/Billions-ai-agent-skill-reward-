@@ -1,16 +1,16 @@
-# 🚀 Verified Agent Identity — Setup Guide
+# 🚀 Billions FAIAR Reward — Verified Agent Identity Installer
 
-Qualify for the **Billions Network FAIAR reward** by giving your AI agent a
-verified on-chain identity and linking it to your Billions account. Pick your
-platform below and run the one-command installer.
+Qualify for the **Billions Network FAIAR reward** by adding the official
+**Verified Agent Identity** skill to your AI agent (Claude Code, Cursor, etc.).
+This repo gives you a **single command** that does everything for you.
 
 ---
 
 ## 🎁 About the FAIAR Reward
 
 **FAIAR** (Future of AI Agent Reputation) is Billions Network's incentive
-program for AI agents that prove a verified identity. By installing the
-`verified-agent-identity` skill, your agent becomes eligible to:
+program for AI agents that prove a verified, on-chain identity. By installing
+the `verified-agent-identity` skill, your agent becomes eligible to:
 
 - ✅ Earn **FAIAR rewards** distributed by Billions Network
 - ✅ Get listed as a **verified agent** in the Billions ecosystem
@@ -18,81 +18,89 @@ program for AI agents that prove a verified identity. By installing the
 - ✅ Build a **verifiable reputation** that follows your agent across platforms
 
 ### Eligibility checklist
-
-1. You have a Billions account (created in the browser at
-   [billions.network](https://billions.network))
+1. You have an AI agent installed locally (Claude Code, Cursor, Cline, etc.)
 2. You install the **Verified Agent Identity** skill (this guide)
 3. You complete the in-browser verification link the installer prints at the
-   end — that's the step that ties the agent to your Billions account
+   end (only needed for brand-new identities — see the FAQ below)
 
 ---
 
-## ⚡ One-Line Install — pick your platform
+## ⚡ One-Line Install
 
-### 📱 Termux (Android)
-
+### 🐧 Linux  /  🍎 macOS  /  📱 Termux (Android)
 ```bash
 curl -sL https://raw.githubusercontent.com/FASHAKING/Billions-ai-agent-skill-reward-/main/install-agent.sh | bash
 ```
 
-### 🪟 Windows (PowerShell / Windows Terminal)
-
+### 🪟 Windows (PowerShell)
 ```powershell
-irm https://raw.githubusercontent.com/FASHAKING/Billions-ai-agent-skill-reward-/main/install-agent-windows.ps1 | iex
+irm https://raw.githubusercontent.com/FASHAKING/Billions-ai-agent-skill-reward-/main/install-agent.ps1 | iex
 ```
 
-> **Requirements:** Windows 10/11 with PowerShell 5.1+. The script will
-> auto-install Node.js and Git via `winget` if they are missing.
-
-### 🍎 macOS (Terminal)
-
-```bash
-curl -sL https://raw.githubusercontent.com/FASHAKING/Billions-ai-agent-skill-reward-/main/install-agent-macos.sh | bash
-```
-
-> Works on both Apple Silicon (M1/M2/M3/M4) and Intel Macs. The script will
-> auto-install Homebrew, Node.js, and Git if they are missing.
-
-### 🐧 Linux / WSL / GitHub Codespaces / Gitpod
-
-```bash
-curl -sL https://raw.githubusercontent.com/FASHAKING/Billions-ai-agent-skill-reward-/main/install-agent-codespaces.sh | bash
-```
-
-> Works on any Ubuntu/Debian-based Linux environment. Also supports Fedora,
-> CentOS, and Alpine.
+> The installers prompt you only when input is actually required. If a
+> Billions identity is already on disk, or you have the private key, you
+> won't be asked for an agent name or description — those are only requested
+> when generating a brand-new identity.
 
 ---
 
-## 🔄 What the installers do
+## 🔄 What the installer does
 
-Each installer follows the same flow:
+The single multi-platform script handles **Termux / Linux / macOS** (the
+PowerShell script is the Windows equivalent). Both go through the same flow:
 
-1. **Installs Node.js and Git** (if not already present) using the right
-   package manager for your OS (`pkg`, `apt`, `dnf`, `pacman`, `brew`,
-   `winget`).
-2. **Sets up the Billions identity for your agent** — and this is where the
-   answer to *"which Billions account does this agent belong to?"* lives:
+1. **Decide identity intent** — before anything is installed:
    - If `BILLIONS_PRIVATE_KEY` is set in your environment, it's imported.
-   - Else, if a previous install is found at `~/verified-agent-identity` with
-     an existing identity file, you'll be asked whether to **reuse** it.
-   - Else, you pick:
+   - Else, if a previous install is found at one of:
+     `~/verified-agent-identity`, `~/.claude/skills/verified-agent-identity`,
+     `~/.cursor/skills/verified-agent-identity`,
+     `~/.cline/skills/verified-agent-identity`,
+     `~/.continue/skills/verified-agent-identity`,
+     `~/.config/clawhub/skills/verified-agent-identity`,
+     `~/.clawhub/skills/verified-agent-identity` —
+     and contains an identity file (`.identity`, `identity.json`, `.env`,
+     or `agent.json`), you're asked **`Reuse it? [Y/n]`**.
+   - Else you pick:
      - `[1]` **Import an existing private key** — paste it (input is hidden).
      - `[2]` **Generate a brand-new identity** — the new key is printed once.
        **Back it up before pressing ENTER** — it will not be shown again.
-3. **Clones** [BillionsNetwork/verified-agent-identity](https://github.com/BillionsNetwork/verified-agent-identity)
-   into `~/verified-agent-identity` (only if not reusing).
-4. **Installs dependencies** via `clawhub`, with a fallback to `npm install`,
-   and pre-installs the modules that are commonly missing
-   (`shell-quote`, `@iden3/js-iden3-auth`, `ethers@6`, `uuid`).
-5. **Creates / imports your Agent Ethereum Identity** by running
-   `node scripts/createNewEthereumIdentity.js` (with `--key <KEY>` if you're
-   importing).
-6. **Generates a verification URL** by running
-   `node scripts/manualLinkHumanToAgent.js --challenge '{...}'` with the
-   agent name and description you entered. Open this URL in your browser and
-   sign in with your Billions account — that handshake is what tells Billions
-   *which account this agent belongs to*.
+   - **Agent name & description are only requested in the "generate"
+     branch.** Reuse / env / import skip those prompts.
+
+2. **Install Node.js + Git** (if missing) using the right package manager
+   for your OS (`pkg`, `apt-get`, `dnf`, `pacman`, `apk`, `brew`, `winget`).
+
+3. **Install the skill files** — try clawhub first:
+   ```
+   npx clawhub@latest install verified-agent-identity
+   ```
+   …and **fall back to a git clone** if clawhub fails or the scripts can't
+   be located afterwards. The fallback clones
+   [BillionsNetwork/verified-agent-identity](https://github.com/BillionsNetwork/verified-agent-identity)
+   into `~/verified-agent-identity`, then runs `npm install` plus the
+   commonly-missing modules: `shell-quote`, `@iden3/js-iden3-auth`,
+   `ethers@6`, `uuid`.
+
+4. **Set up the agent's Ethereum identity**:
+   - `reuse`: skipped — the existing key is left alone.
+   - `env` / `import`: `node scripts/createNewEthereumIdentity.js --key <KEY>`
+   - `generate`: `node scripts/createNewEthereumIdentity.js`, followed by
+     a back-up-now warning and an ENTER gate.
+
+5. **Link to your Billions account** — only runs in `generate` mode (a
+   reused or imported identity is already linked elsewhere). Runs:
+   ```
+   node scripts/manualLinkHumanToAgent.js --challenge '{"name":"...","description":"..."}'
+   ```
+   Open the URL it prints in your browser and sign in with your Billions
+   account — that handshake is what binds the agent to your account.
+
+6. **Register the skill with your AI agent**:
+   ```
+   npx skills add BillionsNetwork/verified-agent-identity
+   ```
+   Pick Claude Code / Cursor / Cline / Continue / etc. with `↑/↓` + `SPACE`
+   + `ENTER`.
 
 ---
 
@@ -110,140 +118,96 @@ It doesn't — until you tell it. The link happens in two pieces:
    identity comes from — the installer never asks for it directly.
 
 If you skip step 2, the agent has an identity but no Billions account
-attached, and FAIAR rewards have nowhere to go.
+attached, and FAIAR rewards have nowhere to go. (That's why the installer
+only skips step 2 when it has good reason to believe you've already done it
+on another machine — i.e. you provided the key or it was already on disk.)
 
 ---
 
-## 📋 Manual Step-by-Step
+## 🆘 Troubleshooting
 
 <details>
-<summary><b>Termux (Android)</b></summary>
+<summary><b>"npx: command not found"</b></summary>
 
-```bash
-# 1. Update and install prerequisites
-pkg update && pkg upgrade
-pkg install nodejs git
-
-# 2. Clone the skill repo
-cd ~
-git clone https://github.com/BillionsNetwork/verified-agent-identity.git
-cd verified-agent-identity
-
-# 3. Install dependencies
-npx clawhub@latest install verified-agent-identity --force
-npm install shell-quote @iden3/js-iden3-auth ethers@6 uuid
-
-# 4a. Create a new identity...
-node scripts/createNewEthereumIdentity.js
-# 4b. ...or import an existing private key
-node scripts/createNewEthereumIdentity.js --key <your-ethereum-private-key>
-
-# 5. Link your Billions account (prints a URL — open it in your browser)
-node scripts/manualLinkHumanToAgent.js --challenge '{"name":"MyAgent","description":"AI agent"}'
-```
-
+The installer auto-installs Node.js, but if it fails:
+- **Termux:** `pkg install nodejs`
+- **Linux (Debian/Ubuntu):** `sudo apt install nodejs npm`
+- **Linux (Fedora):** `sudo dnf install nodejs npm`
+- **macOS:** `brew install node`  (install Homebrew first from https://brew.sh)
+- **Windows:** download installer from https://nodejs.org/
 </details>
 
 <details>
-<summary><b>Windows (PowerShell)</b></summary>
+<summary><b>"Permission denied" on Linux/macOS</b></summary>
 
+Don't run the curl command with `sudo`. If a step needs root (e.g. installing
+Node), the script will call `sudo` itself.
+</details>
+
+<details>
+<summary><b>"Cannot find module 'shell-quote' / '@iden3/js-iden3-auth'"</b></summary>
+
+```bash
+npm install shell-quote @iden3/js-iden3-auth ethers@6 uuid
+```
+
+The installer pre-installs these in the git-clone fallback path, but if you
+ran the manual steps you may need to install them yourself.
+</details>
+
+<details>
+<summary><b>The agent picker doesn't show my agent</b></summary>
+
+Make sure your agent is installed and has been launched at least once so its
+config directory exists. Then re-run the one-line command.
+</details>
+
+<details>
+<summary><b>I want to skip the auto-installer and run it manually</b></summary>
+
+```bash
+# 1. Try clawhub first
+npx clawhub@latest install verified-agent-identity
+
+# 2. If clawhub fails — clone the repo and install deps manually
+cd ~
+git clone https://github.com/BillionsNetwork/verified-agent-identity.git
+cd verified-agent-identity
+npm install shell-quote @iden3/js-iden3-auth ethers@6 uuid
+
+# 3a. Generate a new identity...
+node scripts/createNewEthereumIdentity.js
+# 3b. ...or import an existing private key
+node scripts/createNewEthereumIdentity.js --key <your-ethereum-private-key>
+
+# 4. Link your Billions account (only needed for new identities)
+node scripts/manualLinkHumanToAgent.js --challenge '{"name":"My Agent","description":"AI agent verified via Billions FAIAR"}'
+
+# 5. Register the skill with your AI agent
+npx skills add BillionsNetwork/verified-agent-identity
+```
+
+PowerShell:
 ```powershell
-# 1. Install Node.js and Git
-winget install OpenJS.NodeJS.LTS
-winget install Git.Git
-
-# 2. Clone the skill repo
-cd $HOME
-git clone https://github.com/BillionsNetwork/verified-agent-identity.git
-cd verified-agent-identity
-
-# 3. Install dependencies
 npx clawhub@latest install verified-agent-identity
-npm install shell-quote @iden3/js-iden3-auth ethers@6 uuid
-
-# 4a. Create a new identity...
-node scripts/createNewEthereumIdentity.js
-# 4b. ...or import an existing private key
-node scripts/createNewEthereumIdentity.js --key <your-ethereum-private-key>
-
-# 5. Link your Billions account
-node scripts/manualLinkHumanToAgent.js --challenge '{"name":"MyAgent","description":"AI agent"}'
+# ...same Node-script calls as above; see install-agent.ps1 for the
+# exact PowerShell-quoting trick used for --challenge.
+npx skills add BillionsNetwork/verified-agent-identity
 ```
-
-</details>
-
-<details>
-<summary><b>macOS</b></summary>
-
-```bash
-# 1. Install Homebrew (if not already), then Node.js + Git
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-brew install node git
-
-# 2. Clone the skill repo
-cd ~
-git clone https://github.com/BillionsNetwork/verified-agent-identity.git
-cd verified-agent-identity
-
-# 3. Install dependencies
-npx clawhub@latest install verified-agent-identity
-npm install shell-quote @iden3/js-iden3-auth ethers@6 uuid
-
-# 4a. Create a new identity...
-node scripts/createNewEthereumIdentity.js
-# 4b. ...or import an existing private key
-node scripts/createNewEthereumIdentity.js --key <your-ethereum-private-key>
-
-# 5. Link your Billions account
-node scripts/manualLinkHumanToAgent.js --challenge '{"name":"MyAgent","description":"AI agent"}'
-```
-
-</details>
-
-<details>
-<summary><b>Linux / WSL / Codespaces</b></summary>
-
-```bash
-# 1. Install Node.js and Git
-sudo apt-get update && sudo apt-get install -y nodejs npm git
-# (or dnf / yum / apk equivalents on your distro)
-
-# 2. Clone the skill repo
-cd ~
-git clone https://github.com/BillionsNetwork/verified-agent-identity.git
-cd verified-agent-identity
-
-# 3. Install dependencies
-npx clawhub@latest install verified-agent-identity
-npm install shell-quote @iden3/js-iden3-auth ethers@6 uuid
-
-# 4a. Create a new identity...
-node scripts/createNewEthereumIdentity.js
-# 4b. ...or import an existing private key
-node scripts/createNewEthereumIdentity.js --key <your-ethereum-private-key>
-
-# 5. Link your Billions account
-node scripts/manualLinkHumanToAgent.js --challenge '{"name":"MyAgent","description":"AI agent"}'
-```
-
 </details>
 
 ---
 
-## 🆘 Common Error Fixes
+## 🔐 Security note
 
-**`Cannot find module 'shell-quote'`**
+This installer runs `npx` commands published by **Billions Network** and
+**Clawhub**, and may clone the public
+[BillionsNetwork/verified-agent-identity](https://github.com/BillionsNetwork/verified-agent-identity)
+repo as a fallback. You can audit the script before running it:
+
 ```bash
-npm install shell-quote
+curl -sL https://raw.githubusercontent.com/FASHAKING/Billions-ai-agent-skill-reward-/main/install-agent.sh | less
 ```
-
-**`Cannot find module '@iden3/js-iden3-auth'`**
-```bash
-npm install @iden3/js-iden3-auth
-```
-
-> **Note:** The one-command installers pre-install these modules
-> automatically.
 
 ---
 
