@@ -374,4 +374,4 @@ echo
 ok "Verified Agent Identity skill installed."
 say "You're qualified for the Billions FAIAR reward 🎉"
 echo
-printf "Built with ❤️ by \033]8;;https://x.com/FASHAKING3\033\\fashaking\033]8;;\033\\ for the Billions Community\n"
+printf "Built with ❤️ by ${CYAN}fashaking${NC} (https://x.com/FASHAKING3) for the Billions Community\n"
