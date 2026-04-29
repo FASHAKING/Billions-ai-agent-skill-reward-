@@ -47,5 +47,6 @@ Say "You're qualified for the Billions FAIAR reward!"
 Write-Host ""
 Write-Host "Built with " -NoNewline
 Write-Host "♥" -ForegroundColor Red -NoNewline
-Write-Host " by fashaking — " -NoNewline
-Write-Host "https://x.com/FASHAKING3" -ForegroundColor Cyan
+Write-Host " by " -NoNewline
+Write-Host "fashaking (https://x.com/FASHAKING3)" -ForegroundColor Cyan -NoNewline
+Write-Host " for the Billions Community"
