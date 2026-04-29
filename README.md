@@ -64,12 +64,47 @@ into your terminal. Press **Enter**.
 1. Detect your operating system
 2. Check that **Node.js** + **npx** are installed (auto-installs if missing
    via `pkg` / `apt` / `dnf` / `pacman` / `brew` / `winget`)
-3. Run `npx clawhub@latest install verified-agent-identity` — auto-confirms
-4. Run `npx skills add BillionsNetwork/verified-agent-identity`
+3. Install the skill files: `npx clawhub@latest install verified-agent-identity`
+4. **Set up your Billions identity** (see STEP 3)
+5. **Generate a verification link** so you can connect this agent to your
+   Billions account in the browser (see STEP 4)
+6. Register the skill with the AI agent of your choice:
+   `npx skills add BillionsNetwork/verified-agent-identity`
 
-### STEP 3 — Choose your agent (the only prompt)
+### STEP 3 — Billions identity
 
-When the second command runs, you'll see a list of installed AI agents:
+The agent needs an Ethereum identity (a private key) to be addressable by
+Billions. The installer handles this for you in one of three ways, in order:
+
+1. **Already on this machine?** If a key is detected at a known path (e.g.
+   `~/.billions/identity.json` or in the skill folder) it is reused
+   automatically — you'll just see a confirmation.
+2. **`BILLIONS_PRIVATE_KEY` env var set?** It will be imported.
+3. **Neither?** You're asked:
+   - **`[1]` I already have a private key** — paste it (input is hidden) and it
+     will be imported via `scripts/createNewEthereumIdentity.js --key <KEY>`.
+   - **`[2]` Generate a brand-new identity for me** — runs
+     `scripts/createNewEthereumIdentity.js` and prints the new key. **Back it
+     up in a password manager before pressing ENTER** — it will not be shown
+     again, and losing it means losing the identity (and any FAIAR rewards
+     tied to it).
+
+### STEP 4 — Link the agent to your Billions account
+
+The installer asks for a short **agent name** and **description**, then runs:
+
+```
+node scripts/manualLinkHumanToAgent.js --challenge '{"name":"...","description":"..."}'
+```
+
+That command prints a verification URL on `billions.network`. **Open it in
+your browser and sign in with your Billions account** — that handshake is
+what tells Billions which account this agent belongs to. Press ENTER in the
+terminal when done.
+
+### STEP 5 — Choose your agent (only interactive picker)
+
+You'll see a list of installed AI agents:
 
 ```
 ? Which agent do you want to install this skill to?
@@ -84,12 +119,7 @@ When the second command runs, you'll see a list of installed AI agents:
 🎯 **Press SPACE** to select your agent (e.g. *Claude Code*)
 🎯 **Press ENTER** to confirm
 
-### STEP 4 — Press Enter through the remaining prompts
-
-The installer will run a few final confirmations. **Press ENTER 2–3 times** to
-accept the defaults.
-
-### STEP 5 — Done ✅
+### STEP 6 — Done ✅
 
 You should see:
 ```
@@ -146,13 +176,40 @@ config directory exists. Then re-run the one-line command.
 <summary><b>I want to skip the auto-installer and run it manually</b></summary>
 
 ```bash
-npx clawhub@latest install verified-agent-identity && npx skills add BillionsNetwork/verified-agent-identity
-```
+# 1. Install skill files
+npx clawhub@latest install verified-agent-identity
 
-PowerShell:
-```powershell
-npx clawhub@latest install verified-agent-identity; if ($LASTEXITCODE -eq 0) { npx skills add BillionsNetwork/verified-agent-identity }
+# 2. Identity — either generate a new one...
+cd ~/.claude/skills/verified-agent-identity   # or wherever your skill lives
+node scripts/createNewEthereumIdentity.js
+
+#    ...or import an existing private key
+node scripts/createNewEthereumIdentity.js --key <your-ethereum-private-key>
+
+# 3. Link this agent to your Billions account (opens a URL to billions.network)
+node scripts/manualLinkHumanToAgent.js --challenge '{"name":"My Agent","description":"AI agent verified via Billions FAIAR"}'
+
+# 4. Register the skill with your AI agent
+npx skills add BillionsNetwork/verified-agent-identity
 ```
+</details>
+
+<details>
+<summary><b>How does the agent know which Billions account to link to?</b></summary>
+
+It doesn't — until you tell it. The link happens in two pieces:
+
+1. The agent gets its own **Ethereum identity** (a keypair generated locally
+   by `scripts/createNewEthereumIdentity.js`, or one you import with
+   `--key`). That's the agent's address.
+2. `scripts/manualLinkHumanToAgent.js` produces a **verification URL** on
+   `billions.network`. When you open that URL while signed in to your
+   Billions account, Billions records the binding *human account ↔ agent
+   address*. That browser sign-in is the only place your Billions account
+   identity comes from — the installer never asks for it directly.
+
+If you skip step 2, the agent has an identity but no Billions account
+attached, and FAIAR rewards have nowhere to go.
 </details>
 
 ---
