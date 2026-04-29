@@ -1,20 +1,22 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 # ============================================================
-#  Verified Agent Identity — All-in-One Installer for Termux
+#  Verified Agent Identity — Installer for macOS
 #  GitHub: https://github.com/FASHAKING/Billions-ai-agent-skill-reward-
 #
 #  Usage:
-#    curl -sL https://raw.githubusercontent.com/FASHAKING/Billions-ai-agent-skill-reward-/main/install-agent.sh | bash
+#    curl -sL https://raw.githubusercontent.com/FASHAKING/Billions-ai-agent-skill-reward-/main/install-agent-macos.sh | bash
+#
+#  Supported environments:
+#    - macOS (Apple Silicon & Intel)
 #
 #  What this script does:
-#    1. Updates & upgrades Termux packages
-#    2. Installs Node.js and Git
-#    3. Detects an existing Billions identity (or asks you to import / create one)
-#    4. Clones the verified-agent-identity repo
-#    5. Installs all dependencies (including the commonly missing ones)
-#    6. Creates / imports your Agent Ethereum Identity
-#    7. Generates a verification URL so you can link this agent to your
+#    1. Installs Homebrew, Node.js, and Git if not already present
+#    2. Detects an existing Billions identity (or asks you to import / create one)
+#    3. Clones the verified-agent-identity repo
+#    4. Installs all dependencies (including the commonly missing ones)
+#    5. Creates / imports your Agent Ethereum Identity
+#    6. Generates a verification URL so you can link this agent to your
 #       Billions account in the browser
 # ============================================================
 
@@ -31,21 +33,20 @@ print_banner() {
     echo ""
     echo -e "${CYAN}╔══════════════════════════════════════════════════════════╗${NC}"
     echo -e "${CYAN}║                                                          ║${NC}"
-    echo -e "${CYAN}║   ${BOLD}Verified Agent Identity — Termux Installer${NC}${CYAN}             ║${NC}"
+    echo -e "${CYAN}║   ${BOLD}Verified Agent Identity — macOS Installer${NC}${CYAN}              ║${NC}"
     echo -e "${CYAN}║   ${NC}by BillionsNetwork${CYAN}                                     ║${NC}"
     echo -e "${CYAN}║                                                          ║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════════════════════════╝${NC}"
     echo ""
 }
 
-print_step()    { echo ""; echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"; echo -e "${GREEN}  ✦ STEP $1: $2${NC}"; echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"; echo ""; }
-print_success() { echo -e "${GREEN}  ✔ $1${NC}"; }
-print_warning() { echo -e "${YELLOW}  ⚠ $1${NC}"; }
-print_error()   { echo -e "${RED}  ✖ $1${NC}"; }
-print_info()    { echo -e "${CYAN}  ℹ $1${NC}"; }
+print_step()    { echo ""; echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"; echo -e "${GREEN}  STEP $1: $2${NC}"; echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"; echo ""; }
+print_success() { echo -e "${GREEN}  [OK] $1${NC}"; }
+print_warning() { echo -e "${YELLOW}  [!]  $1${NC}"; }
+print_error()   { echo -e "${RED}  [X]  $1${NC}"; }
+print_info()    { echo -e "${CYAN}  [i]  $1${NC}"; }
 
 read_secret() {
-    # read_secret VAR "Prompt text"
     local __var="$1" prompt="$2" reply
     printf "  %s: " "$prompt" > /dev/tty
     stty -echo < /dev/tty
@@ -55,16 +56,21 @@ read_secret() {
     eval "$__var=\$reply"
 }
 
-# ============================================================
-#  START
-# ============================================================
 print_banner
+
+if [ "$(uname)" != "Darwin" ]; then
+    print_error "This script is for macOS only."
+    print_info "For Linux/WSL, use: install-agent-codespaces.sh"
+    print_info "For Termux,    use: install-agent.sh"
+    exit 1
+fi
+print_info "Detected: macOS $(sw_vers -productVersion 2>/dev/null || echo '')"
 
 INSTALL_DIR="$HOME/verified-agent-identity"
 
-# --- Identity intent: figure out what to do BEFORE we touch anything ---
+# --- Identity intent ---
 EXISTING_KEY=""
-USE_MODE=""   # one of: env | reuse | import | generate
+USE_MODE=""
 
 if [ -n "${BILLIONS_PRIVATE_KEY:-}" ]; then
     EXISTING_KEY="$BILLIONS_PRIVATE_KEY"
@@ -81,7 +87,7 @@ if [ -z "$USE_MODE" ] && [ -d "$INSTALL_DIR" ]; then
         [ -f "$f" ] && HAS_LOCAL_ID="$f" && break
     done
     if [ -n "$HAS_LOCAL_ID" ]; then
-        echo -e "${BOLD}Existing Billions identity found on this device:${NC}"
+        echo -e "${BOLD}Existing Billions identity found on this Mac:${NC}"
         echo "    $HAS_LOCAL_ID"
         echo ""
         read -p "  Reuse it? [Y/n]: " REUSE < /dev/tty
@@ -138,35 +144,46 @@ if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
 fi
 
 # ============================================================
-#  STEP 1: Update & upgrade Termux packages
+#  STEP 1: Install Homebrew, Node.js, Git
 # ============================================================
-print_step "1/6" "Updating & upgrading Termux packages"
-yes | pkg update -y 2>&1
-yes | pkg upgrade -y 2>&1
-print_success "Termux packages updated and upgraded."
+print_step "1/5" "Checking and installing Homebrew, Node.js, and Git"
+
+if command -v brew &>/dev/null; then
+    print_success "Homebrew already installed: $(brew --version | head -1)"
+else
+    print_info "Homebrew not found. Installing..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" < /dev/tty
+    if   [ -f "/opt/homebrew/bin/brew" ]; then eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [ -f "/usr/local/bin/brew"   ]; then eval "$(/usr/local/bin/brew shellenv)"; fi
+    command -v brew &>/dev/null || { print_error "Homebrew install failed. https://brew.sh"; exit 1; }
+    print_success "Homebrew installed."
+fi
+
+if command -v node &>/dev/null; then
+    print_success "Node.js already installed: $(node -v)"
+else
+    print_info "Node.js not found. Installing via Homebrew..."
+    brew install node
+    command -v node &>/dev/null || { print_error "Node.js install failed."; exit 1; }
+    print_success "Node.js installed: $(node -v)"
+fi
+
+if command -v git &>/dev/null; then
+    print_success "Git already installed: $(git --version)"
+else
+    print_info "Git not found. Installing via Homebrew..."
+    brew install git
+    print_success "Git installed: $(git --version)"
+fi
+
+print_success "Node.js version: $(node -v)"
+print_success "npm version: $(npm -v)"
+print_success "Git version: $(git --version)"
 
 # ============================================================
-#  STEP 2: Install Node.js and Git
+#  STEP 2: Clone (or reuse) the repo
 # ============================================================
-print_step "2/6" "Installing Node.js and Git"
-
-yes | pkg install nodejs -y 2>&1
-print_success "Node.js installed."
-yes | pkg install git -y 2>&1
-print_success "Git installed."
-
-NODE_VERSION=$(node -v 2>/dev/null)
-NPM_VERSION=$(npm -v 2>/dev/null)
-GIT_VERSION=$(git --version 2>/dev/null)
-[ -z "$NODE_VERSION" ] && { print_error "Node.js installation failed."; exit 1; }
-print_success "Node.js version: ${NODE_VERSION}"
-print_success "npm version: ${NPM_VERSION}"
-print_success "Git version: ${GIT_VERSION}"
-
-# ============================================================
-#  STEP 3: Clone the repository (skip if reusing existing)
-# ============================================================
-print_step "3/6" "Preparing verified-agent-identity repository"
+print_step "2/5" "Preparing verified-agent-identity repository"
 
 cd "$HOME"
 if [ "$USE_MODE" = "reuse" ]; then
@@ -184,17 +201,16 @@ fi
 print_info "Working directory: $(pwd)"
 
 # ============================================================
-#  STEP 4: Install dependencies (clawhub + commonly missing modules)
+#  STEP 3: Install dependencies
 # ============================================================
-print_step "4/6" "Installing project dependencies"
+print_step "3/5" "Installing project dependencies"
 
-if yes | npx clawhub@latest install verified-agent-identity --force 2>&1; then
+if npx --yes clawhub@latest install verified-agent-identity 2>&1; then
     print_success "clawhub dependencies installed."
 else
     print_warning "clawhub failed — falling back to npm install..."
-    [ ! -f "package.json" ] && npm init -y 2>&1
     npm install 2>&1
-    print_success "npm dependencies installed (fallback)."
+    print_success "npm dependencies installed."
 fi
 
 print_info "Installing commonly required modules to prevent errors..."
@@ -205,9 +221,9 @@ npm install uuid 2>&1                   && print_success "Installed: uuid"
 print_success "All dependencies installed."
 
 # ============================================================
-#  STEP 5: Create / import Agent Ethereum Identity
+#  STEP 4: Identity
 # ============================================================
-print_step "5/6" "Setting up your Agent Ethereum Identity"
+print_step "4/5" "Setting up your Agent Ethereum Identity"
 
 case "$USE_MODE" in
     reuse)
@@ -233,9 +249,9 @@ case "$USE_MODE" in
 esac
 
 # ============================================================
-#  STEP 6: Link Human Identity with Agent
+#  STEP 5: Link to Billions account
 # ============================================================
-print_step "6/6" "Generating Billions account verification link"
+print_step "5/5" "Generating Billions account verification link"
 
 echo ""
 print_info "Using Agent Name: ${AGENT_NAME}"
@@ -250,7 +266,7 @@ node scripts/manualLinkHumanToAgent.js --challenge "{\"name\":\"${AGENT_NAME}\",
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║                                                          ║${NC}"
-echo -e "${GREEN}║   ${BOLD}✔ Installation Complete!${NC}${GREEN}                                ║${NC}"
+echo -e "${GREEN}║    Installation Complete!                                ║${NC}"
 echo -e "${GREEN}║                                                          ║${NC}"
 echo -e "${GREEN}╠══════════════════════════════════════════════════════════╣${NC}"
 echo -e "${GREEN}║                                                          ║${NC}"
