@@ -253,7 +253,27 @@ switch ($UseMode) {
         node scripts/createNewEthereumIdentity.js
         if ($LASTEXITCODE -ne 0) { Die "Failed to generate a new identity." }
         Write-Host ""
-        Write-Host "!! IMPORTANT - BACK UP THE PRIVATE KEY PRINTED ABOVE !!" -ForegroundColor Red
+        # Upstream createNewEthereumIdentity.js sometimes only prints
+        # the DID and silently writes the key to disk, so the "key
+        # printed above" guidance is empty. Read it back out and surface it.
+        $PrintedKey = $null
+        $PrintedFile = $null
+        foreach ($f in @(".identity","identity.json",".env","agent.json")) {
+            $path = Join-Path $WorkingDir $f
+            if (-not (Test-Path $path)) { continue }
+            $match = Select-String -Path $path -Pattern '0x[a-fA-F0-9]{64}' -AllMatches |
+                     Select-Object -First 1 -ExpandProperty Matches |
+                     Select-Object -First 1
+            if ($match) { $PrintedKey = $match.Value; $PrintedFile = $path; break }
+        }
+        if ($PrintedKey) {
+            Write-Host ("    Identity file : {0}" -f $PrintedFile)
+            Write-Host ("    Private key   : {0}" -f $PrintedKey) -ForegroundColor Red
+            Write-Host ""
+        } else {
+            Warn "Could not auto-detect the private key. Check $WorkingDir for .identity / identity.json / .env / agent.json"
+        }
+        Write-Host "!! IMPORTANT - BACK UP THE PRIVATE KEY SHOWN ABOVE !!" -ForegroundColor Red
         Write-Host "This key IS your agent's Billions identity. If you lose it," -ForegroundColor Red
         Write-Host "you lose the identity (and any FAIAR rewards tied to it)." -ForegroundColor Red
         Write-Host "Save it in a password manager NOW. It will not be shown again." -ForegroundColor Red
